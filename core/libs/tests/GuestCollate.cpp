@@ -79,7 +79,7 @@ std::uint64_t Hash(const GuestLocale::CollateFacet* facet, const Wide& text) {
 }
 
 const char16_t* Stored(const GuestLocale::String& text) {
-    return reinterpret_cast<const char16_t*>(text.capacity == 14 ? text.buffer : text.pointer);
+    return reinterpret_cast<const char16_t*>(text.capacity <= 7 ? text.buffer : text.pointer);
 }
 
 GuestLocale::String Transformed(const GuestLocale::CollateFacet* facet, const Wide& text) {
@@ -237,20 +237,21 @@ std::uint64_t folded = 0xcbf29ce484222325ull;
     reject([&] { WideVtable(wideFacet).hash(wideCollate, wideText.data() + 1, wideText.data()); });
 
     const GuestLocale::String shortWide = Transformed(wideCollate, u"hello");
-    require(shortWide.size == 5 && shortWide.capacity == 14 && shortWide.reserved == 0xcdcdcdcdcdcdcdcdull);
+    require(shortWide.size == 5 && shortWide.capacity == 7 && shortWide.reserved == 0xcdcdcdcdcdcdcdcdull);
     require(Wide(Stored(shortWide), shortWide.size) == u"hello" && allocations == 4);
 
     const GuestLocale::String emptyWide = Transformed(wideCollate, u"");
-    require(emptyWide.size == 0 && emptyWide.capacity == 14 && Stored(emptyWide)[0] == 0 && allocations == 4);
+    require(emptyWide.size == 0 && emptyWide.capacity == 7 && Stored(emptyWide)[0] == 0 && allocations == 4);
 
     const Wide seven(7, u'q');
     const GuestLocale::String inlineWide = Transformed(wideCollate, seven);
-    require(inlineWide.size == 7 && inlineWide.capacity == 14 && Wide(Stored(inlineWide), 7) == seven && allocations == 4);
+    require(inlineWide.size == 7 && inlineWide.capacity == 7 && Wide(Stored(inlineWide), 7) == seven && allocations == 4);
 
     const Wide eight(8, u'q');
     const GuestLocale::String heapWide = Transformed(wideCollate, eight);
-    require(heapWide.size == 8 && heapWide.capacity == 16 && Wide(Stored(heapWide), 8) == eight);
+    require(heapWide.size == 8 && heapWide.capacity == 8 && Wide(Stored(heapWide), 8) == eight);
     require(allocations == 5 && lastSize == 18 && reinterpret_cast<const char16_t*>(lastAllocation)[8] == 0);
+    require(lastSize / sizeof(char16_t) - 1 == heapWide.capacity);
     std::free(heapWide.pointer);
 
     const Wide longest(2047, u'z');

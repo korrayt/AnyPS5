@@ -79,7 +79,9 @@ GuestLocale::Facet* g_classicFacets[1]{};
 GuestLocale::Implementation g_classicLocale{{&g_localeVtable, 1, 0}, g_classicFacets, 1, 0, false, "C"};
 
 constexpr std::size_t GuestStringInlineCapacity = 15;
-constexpr std::size_t WideStringInlineCapacity = GuestStringInlineCapacity - 1;
+// The inline buffer is 16 bytes and one wide character is two of them, so it holds 7 and its terminator.
+// Like the narrow inline capacity this is the character count, not the byte count.
+constexpr std::size_t WideStringInlineCharacters = (sizeof(GuestLocale::String::buffer) - 1) / sizeof(char16_t);
 constexpr std::size_t GuestStringLargeAllocation = 0x1000;
 
 void ValidateCharacterRange(const char* first, const char* last, const char* function) {
@@ -169,13 +171,15 @@ GuestLocale::String* APS5_VABI CollateWideTransform(GuestLocale::String* result,
     ValidateWideCharacterRange(first, last, "collate::do_transform");
     const auto length = static_cast<std::size_t>(last - first);
     if (length != 0 && std::find(first, last, u'\0') != last) throw std::runtime_error("collate::do_transform: embedded null characters are not supported");
+    // size and capacity both count characters, as they do in a basic_string; only the copy and the
+    // allocation are measured in bytes.
     const auto bytes = length * sizeof(char16_t);
     if (bytes + sizeof(char16_t) >= GuestStringLargeAllocation) throw std::runtime_error("collate::do_transform: results of 2047 characters or more are not supported");
     char* data = result->buffer;
-    std::size_t capacity = WideStringInlineCapacity;
-    if (bytes > capacity) {
-        capacity = bytes;
-        data = static_cast<char*>(_Znwm_nid_postfix(capacity + sizeof(char16_t)));
+    std::size_t capacity = WideStringInlineCharacters;
+    if (length > capacity) {
+        capacity = length;
+        data = static_cast<char*>(_Znwm_nid_postfix(bytes + sizeof(char16_t)));
     }
     if (length != 0) std::memcpy(data, first, bytes);
     std::memset(data + bytes, 0, sizeof(char16_t));
